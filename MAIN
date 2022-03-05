@@ -1,0 +1,76 @@
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <MAX30100_PulseOximeter.h>
+#include <Adafruit_MLX90614.h>
+
+#define SDA_2 21
+#define SCL_2 22
+
+#define REPORTING_PERIOD_MS 1000
+PulseOximeter pox;
+Adafruit_MLX90614 mlx = Adafruit_MLX90614();
+
+uint32_t tsLastReport = 0;
+
+
+void onBeatDetected()
+{
+  Serial.println("Beat!");
+}
+
+void setup()
+{
+  Serial.begin(115200);
+  pinMode(19, OUTPUT);
+  Serial.print("Initializing pulse oximeter..");
+  Wire1.begin(SDA_2, SCL_2);
+  mlx.begin(0x5A, &Wire1);
+}
+
+void loop()
+{
+
+  Serial.print("Ambient = ");
+  Serial.print(mlx.readAmbientTempC());
+  Serial.print("*C\tObject = ");
+  Serial.print(mlx.readObjectTempC());
+  Serial.println("*C");
+  Serial.print("Ambient = ");
+  Serial.print(mlx.readAmbientTempF());
+  Serial.print("*F\tObject = ");
+  Serial.print(mlx.readObjectTempF());
+  Serial.println("*F");
+
+  Serial.println();
+  delay(1000);
+  if (mlx.readObjectTempF() > 90)
+  {
+    pulse();
+  }
+
+}
+void pulse()
+{
+
+  if (!pox.begin()) {
+    Serial.println("FAILED");
+    for (;;);
+  }
+  else {
+    Serial.println("SUCCESS");
+    pox.setOnBeatDetectedCallback(onBeatDetected);
+    for (int i = 0; i < 10; i++) {
+      pox.update();
+      Serial.print("Heart rate:");
+      Serial.print(pox.getHeartRate());
+      Serial.print("bpm / SpO2:");
+      Serial.print(pox.getSpO2());
+      Serial.println("%");
+      Serial.println();
+      delay(1000);
+    }
+  }
+  pox.setIRLedCurrent(MAX30100_LED_CURR_7_6MA);
+
+
+}
