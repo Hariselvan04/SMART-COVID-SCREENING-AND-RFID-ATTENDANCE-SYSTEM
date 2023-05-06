@@ -2,16 +2,29 @@
 #include <Adafruit_Sensor.h>
 #include <MAX30100_PulseOximeter.h>
 #include <Adafruit_MLX90614.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define echoPin 32
+#define trigPin 33
 
 #define SDA_2 21
 #define SCL_2 22
 
 #define REPORTING_PERIOD_MS 1000
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 32 //64 // OLED display height, in pixels
+
+#define OLED_RESET     -1 // 4 // Reset pin # (or -1 if sharing Arduino reset pin)
+#define SCREEN_ADDRESS 0x3c
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 PulseOximeter pox;
 Adafruit_MLX90614 mlx = Adafruit_MLX90614();
 
+long duration;
+int distance;
 uint32_t tsLastReport = 0;
-
+float tempDisp=0;
 
 void onBeatDetected()
 {
@@ -21,56 +34,162 @@ void onBeatDetected()
 void setup()
 {
   Serial.begin(115200);
+  pinMode(trigPin,OUTPUT);
+  pinMode(echoPin,INPUT);
+  Serial.println("SSD1306 128x64 OLED TEST");
+  // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
+  if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+    Serial.println(F("SSD1306 allocation failed"));
+    for (;;); // Don't proceed, loop forever
+  }
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+  display.setCursor(20, 18);
+  // Display static text
+  display.print("**...WELCOME...**");
+  display.display();
+  delay(2000); // Pause for 2 seconds
+  display.clearDisplay();
   pinMode(19, OUTPUT);
-  Serial.print("Initializing pulse oximeter..");
   Wire1.begin(SDA_2, SCL_2);
   mlx.begin(0x5A, &Wire1);
 }
 
 void loop()
 {
-
-  Serial.print("Ambient = ");
-  Serial.print(mlx.readAmbientTempC());
-  Serial.print("*C\tObject = ");
-  Serial.print(mlx.readObjectTempC());
-  Serial.println("*C");
-  Serial.print("Ambient = ");
-  Serial.print(mlx.readAmbientTempF());
-  Serial.print("*F\tObject = ");
-  Serial.print(mlx.readObjectTempF());
-  Serial.println("*F");
-
-  Serial.println();
+  digitalWrite(trigPin,LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin,HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin,LOW);
+ 
+  duration=pulseIn(echoPin,HIGH);
+  distance=(duration*0.034/2);
+  Serial.print("Distance : ");
+  Serial.print(distance);
+  Serial.println(" cm ");
   delay(1000);
-  if (mlx.readObjectTempF() > 90)
+ 
+  if(distance <= 2)
   {
+    while(tempDisp < 34)
+    {
+      mlx.begin(0x5A, &Wire1);
+      Serial.print("Ambient = ");
+      Serial.print(mlx.readAmbientTempC());
+      Serial.print("*C\tObject = ");
+      tempDisp=mlx.readObjectTempC();
+      Serial.print(tempDisp);
+      Serial.println("*C");
+      Serial.print("Ambient = ");
+      Serial.print(mlx.readAmbientTempF());
+      Serial.print("*F\tObject = ");
+      Serial.print(mlx.readObjectTempF());
+      Serial.println("*F");
+      Serial.println();
+      temp_display();
+    }
     pulse();
   }
+  else
+  {
+    display.clearDisplay();
+    display.setCursor(25, 10);
+    display.setTextSize(1);
+    display.setTextColor(WHITE);
+    display.print("place your hand");
+    display.display();
+  }
+}
 
+void temp_display()
+{
+  display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS);
+  Serial.println("Display Loop Enter");
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+  display.println(" Temperature");
+  display.setTextSize(2);
+  display.setCursor(25, 10);
+  display.print(tempDisp);
+  display.print((char)247);
+  display.print("C");
+  display.display();
+  delay(1000);
+}
+
+void display_pulse(float bpm, int spo2)
+{
+  display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS);
+  display.clearDisplay();
+  display.fillRect(0, 18, 127, 15, SSD1306_BLACK);
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+  display.setCursor(0, 18);
+  // Display static text
+  display.print("BPM ");
+  display.print(bpm);
+  display.display();
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+  display.setCursor(64, 18);
+  // Display static text
+  display.print("Spo2% ");
+  display.println(spo2);
+  display.display();
+  delay(1000);
 }
 void pulse()
 {
+  int heart = 0;
+  int oxygen = 0;
+  int heartavrg = 0;
+  int oxygenavrg = 0;
 
+  Serial.print("Initializing pulse oximeter..");
   if (!pox.begin()) {
     Serial.println("FAILED");
     for (;;);
   }
   else {
-    Serial.println("SUCCESS");
-    pox.setOnBeatDetectedCallback(onBeatDetected);
-    for (int i = 0; i < 10; i++) {
+
+    for (int i = 0; i < 500; i++) {
+      //Serial.println("SUCCESS");
       pox.update();
-      Serial.print("Heart rate:");
-      Serial.print(pox.getHeartRate());
-      Serial.print("bpm / SpO2:");
-      Serial.print(pox.getSpO2());
-      Serial.println("%");
-      Serial.println();
-      delay(1000);
+
+      //            Serial.print("Heart rate:");
+      //            Serial.print(pox.getHeartRate());
+      //            Serial.print("bpm / SpO2:");
+      //            Serial.print(pox.getSpO2());
+      //            Serial.println("%");
+      //            Serial.println();
+
+      pox.setOnBeatDetectedCallback(onBeatDetected);
+      if (pox.getHeartRate() > 70) {
+        heart = heart + pox.getHeartRate();
+        heartavrg++;
+      }
+      if (pox.getSpO2() > 90) {
+        oxygen = oxygen + pox.getSpO2();
+        oxygenavrg++;
+      }
+      delay(20);
     }
   }
+
+  float HeartValue = float(heart) / heartavrg;
+  int OxygenValue = oxygen / oxygenavrg;
+  Serial.print("Heart rate:  ");
+  Serial.print(float(HeartValue), 2);
+  Serial.print("\t bpm / SpO2:  ");
+  Serial.print(OxygenValue);
+  Serial.println("%");
+  Serial.println("********************************");
   pox.setIRLedCurrent(MAX30100_LED_CURR_7_6MA);
-
-
+  display_pulse(float(HeartValue), int(OxygenValue));
+  delay(2500);
+  ESP.restart();
 }
